@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ryzal - Live Worker Tracking</title>
     
+    <!-- Leaflet CSS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
@@ -207,12 +210,12 @@
         </div>
     </div>
 
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <!-- Firebase JS SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
-    <!-- Google Maps JavaScript API (Apni API key yahan bhi zaroor dalein) -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD7wWfJhWFfeoYiF34BMw6Mfbe6fPmsSiA"></script>
 
     <script>
         // -------------------------------------------------------------
@@ -236,26 +239,33 @@
         const workerPhoneParam = urlParams.get('phone') || "03001234567";
 
         // -------------------------------------------------------------
-        // 2. GOOGLE MAP INITIALIZATION
+        // 2. MAP INITIALIZATION (OpenStreetMap France Tiles)
         // -------------------------------------------------------------
-        let map;
+        const map = L.map('map', { zoomControl: false }).setView([30.3753, 69.3451], 6);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
+            maxZoom: 20,
+            attribution: '&copy; OpenStreetMap France | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+		
+        // Custom Glowing Pulse Marker Icon
+        const customIcon = L.divIcon({
+            className: 'custom-pin',
+            html: `
+                <div style="
+                    width: 20px; 
+                    height: 20px; 
+                    background: #38bdf8; 
+                    border: 3px solid #ffffff; 
+                    border-radius: 50%; 
+                    box-shadow: 0 0 15px #38bdf8;
+                "></div>
+            `,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+
         let marker = null;
-
-        function initMap() {
-            // Default center Pakistan rakha hai jab tak live location na mile
-            const defaultLocation = { lat: 30.3753, lng: 69.3451 };
-            
-            map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 6,
-                center: defaultLocation,
-                mapTypeControl: false,
-                streetViewControl: false,
-                fullscreenControl: false
-            });
-
-            // Firebase real-time listener map init hone ke baad start hoga
-            listenToWorkerLocation();
-        }
 
         // -------------------------------------------------------------
         // 3. REAL-TIME FIRESTORE LISTENER
@@ -263,62 +273,52 @@
         document.getElementById('workerPhone').innerText = "Phone: " + workerPhoneParam;
         document.getElementById('workerName').innerText = "Worker: " + workerPhoneParam;
 
-        function listenToWorkerLocation() {
-            db.collection("active_workers").doc(workerPhoneParam)
-                .onSnapshot((doc) => {
-                    if (doc.exists) {
-                        const data = doc.data();
-                        const lat = data.latitude;
-                        const lng = data.longitude;
-                        const dutyStatus = data.dutyStatus || "OFF";
-                        const lastUpdated = data.lastUpdated || data.timestamp || Date.now();
+        db.collection("active_workers").doc(workerPhoneParam)
+            .onSnapshot((doc) => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    const lat = data.latitude;
+                    const lng = data.longitude;
+                    const dutyStatus = data.dutyStatus || "OFF";
+                    const lastUpdated = data.lastUpdated || data.timestamp || Date.now();
 
-                        // Update UI Stats
-                        document.getElementById('latVal').innerText = lat ? lat.toFixed(6) : "--";
-                        document.getElementById('lngVal').innerText = lng ? lng.toFixed(6) : "--";
-                        
-                        const timeStr = new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                        document.getElementById('lastUpdatedVal').innerText = timeStr;
+                    // Update UI Stats
+                    document.getElementById('latVal').innerText = lat ? lat.toFixed(6) : "--";
+                    document.getElementById('lngVal').innerText = lng ? lng.toFixed(6) : "--";
+                    
+                    const timeStr = new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    document.getElementById('lastUpdatedVal').innerText = timeStr;
 
-                        const dutyBadge = document.getElementById('dutyBadge');
-                        if (dutyStatus === "ON") {
-                            dutyBadge.innerText = "ON DUTY";
-                            dutyBadge.className = "duty-tag duty-on";
-                            document.getElementById('statusText').innerText = "Live Connected";
-                        } else {
-                            dutyBadge.innerText = "OFF DUTY";
-                            dutyBadge.className = "duty-tag duty-off";
-                            document.getElementById('statusText').innerText = "Worker Off Duty";
-                        }
-
-                        // Live Google Map Marker Update
-                        if (lat && lng) {
-                            const newLatLng = { lat: lat, lng: lng };
-
-                            if (!marker) {
-                                marker = new google.maps.Marker({
-                                    position: newLatLng,
-                                    map: map,
-                                    title: "Worker Live Location"
-                                });
-                                map.setCenter(newLatLng);
-                                map.setZoom(16);
-                            } else {
-                                marker.setPosition(newLatLng);
-                                map.panTo(newLatLng);
-                            }
-                        }
+                    const dutyBadge = document.getElementById('dutyBadge');
+                    if (dutyStatus === "ON") {
+                        dutyBadge.innerText = "ON DUTY";
+                        dutyBadge.className = "duty-tag duty-on";
+                        document.getElementById('statusText').innerText = "Live Connected";
                     } else {
-                        document.getElementById('statusText').innerText = "No Data Found";
+                        dutyBadge.innerText = "OFF DUTY";
+                        dutyBadge.className = "duty-tag duty-off";
+                        document.getElementById('statusText').innerText = "Worker Off Duty";
                     }
-                }, (error) => {
-                    console.error("Firestore Error: ", error);
-                    document.getElementById('statusText').innerText = "Error Loading Data";
-                });
-        }
 
-        // Window load par Google Map callback trigger hoga
-        window.onload = initMap;
+                    // Live Marker Update
+                    if (lat && lng) {
+                        const newLatLng = [lat, lng];
+
+                        if (!marker) {
+                            marker = L.marker(newLatLng, { icon: customIcon }).addTo(map);
+                            map.setView(newLatLng, 16);
+                        } else {
+                            marker.setLatLng(newLatLng);
+                            map.panTo(newLatLng, { animate: true, duration: 1.0 });
+                        }
+                    }
+                } else {
+                    document.getElementById('statusText').innerText = "No Data Found";
+                }
+            }, (error) => {
+                console.error("Firestore Error: ", error);
+                document.getElementById('statusText').innerText = "Error Loading Data";
+            });
     </script>
 </body>
 </html>
